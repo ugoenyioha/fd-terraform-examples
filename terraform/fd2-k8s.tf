@@ -1,7 +1,6 @@
 resource "google_compute_network" "fd-2" {
   name                    = "fd2-network"
   auto_create_subnetworks = false
-
 }
 
 variable "fd2-ip-range" {
@@ -13,18 +12,6 @@ variable "fd2-ip-range" {
 data "http" "myip" {
   url = "http://ipv4.icanhazip.com"
 }
-
-//resource "null_resource" "shell" {
-//  triggers {}
-//
-//  provisioner "local-exec" {
-//    command = "gcloud alpha cloud-shell ssh --command=curl ipv4.icanhazip.com"
-//
-//    environment {
-//      GOOGLE_APPLICATION_CREDENTIALS = "${path.module}/terraform.json"
-//    }
-//  }
-//}
 
 data "external" "shell" {
   program = ["./ip.sh"]
@@ -66,8 +53,8 @@ resource "google_container_cluster" "fd2-k8s-cluster" {
   provider = "google-beta"
 
   name               = "tf-gke-helm"
-  zone               = "${var.zone}"
-  initial_node_count = 3
+  region               = "${var.region}"  // creates a regional cluster of 3
+  initial_node_count = 1
   min_master_version = "${data.google_container_engine_versions.default.latest_master_version}"
   network            = "${google_compute_network.fd-2.self_link}"
   subnetwork         = "${google_compute_subnetwork.fd-2-subnet.self_link}"
@@ -115,7 +102,7 @@ resource "google_container_cluster" "fd2-k8s-cluster" {
       },
       {
         display_name = "shell"
-        cidr_block = "${lookup(data.external.shell.result, "out1")}"
+        cidr_block = "${lookup(data.external.shell.result, "shell-address")}/32"
       }
     ]
   }
@@ -140,11 +127,14 @@ resource "google_container_cluster" "fd2-k8s-cluster" {
 
     image_type   = "COS"
 
+    workload_metadata_config {
+      node_metadata = "SECURE"
+    }
   }
 
-    lifecycle {
-      ignore_changes = ["ip_allocation_policy", "network", "subnetwork", "node_config"]
-    }
+  lifecycle {
+    ignore_changes = ["ip_allocation_policy", "network", "subnetwork", "node_config"]
+  }
 }
 
 data "google_client_openid_userinfo" "provider_identity" {}
@@ -177,49 +167,41 @@ resource "kubernetes_cluster_role_binding" "user" {
 data "google_container_registry_repository" "registry" {}
 data "google_project" "current_project" {}
 
-resource "null_resource" "deploy-microservices-app" {
-  triggers {
-    cluster_ep = "${google_container_cluster.fd2-k8s-cluster.endpoint}"
-  }
-
-  provisioner "local-exec" {
-    command = <<EOT
-        echo "$${CA_CERTIFICATE}" > ${path.module}/k8s/ca.crt
-
-        kubectl config --kubeconfig=${path.module}/k8s/ci set-cluster my-cluster --server=$${K8S_SERVER} --certificate-authority=${path.module}/k8s/ca.crt
-        kubectl config --kubeconfig=${path.module}/k8s/ci set-credentials admin --token=$${K8S_TOKEN}
-        kubectl config --kubeconfig=${path.module}/k8s/ci set-context gke --cluster=my-cluster --user=admin
-
-        kubectl --kubeconfig=${path.module}/k8s/ci --context gke get cs
-
-        gcloud auth configure-docker && pushd ${path.module}/../microservices-demo && skaffold run -p gcb --default-repo=gcr.io/${var.project} && popd
-
-        sleep 60
-
-      EOT
-
-    environment {
-      CA_CERTIFICATE = "${base64decode(google_container_cluster.fd2-k8s-cluster.master_auth.0.cluster_ca_certificate)}"
-      K8S_SERVER = "https://${google_container_cluster.fd2-k8s-cluster.endpoint}"
-      KUBERNETES_MASTER = "https://${google_container_cluster.fd2-k8s-cluster.endpoint}:8080"
-      K8S_TOKEN = "${data.google_client_config.provider.access_token}"
-      GCP_PROJECT = "${var.project}"
-      GCP_ZONE = "${google_container_cluster.fd2-k8s-cluster.zone}"
-      GOOGLE_APPLICATION_CREDENTIALS = "${path.module}/terraform.json"
-      KUBECONFIG="${path.module}/k8s/ci"
-    }
-  }
-
-}
-
-//resource "null_resource" "deploy_google_demo" {
+//resource "null_resource" "deploy-microservices-app" {
 //  triggers {
 //    cluster_ep = "${google_container_cluster.fd2-k8s-cluster.endpoint}"
 //  }
 //
 //  provisioner "local-exec" {
 //    command = <<EOT
-//      pushd ../microservices-demo skaffold dev --default-repo ${data.google_container_registry_repository.registry.repository_url}
-//    EOT
+//        echo "$${CA_CERTIFICATE}" > ${path.module}/k8s/ca.crt
+//
+//        kubectl config --kubeconfig=${path.module}/k8s/ci set-cluster my-cluster --server=$${K8S_SERVER} --certificate-authority=${path.module}/k8s/ca.crt
+//        kubectl config --kubeconfig=${path.module}/k8s/ci set-credentials admin --token=$${K8S_TOKEN}
+//        kubectl config --kubeconfig=${path.module}/k8s/ci set-context gke --cluster=my-cluster --user=admin
+//
+//        kubectl --kubeconfig=${path.module}/k8s/ci --context gke get cs
+//
+//        gcloud auth configure-docker
+//        pushd ${path.module}/../microservices-demo
+//        skaffold run -p gcb --default-repo=gcr.io/${var.project}
+//        popd
+//
+//        sleep 60
+//
+//      EOT
+//
+//    environment {
+//      CA_CERTIFICATE = "${base64decode(google_container_cluster.fd2-k8s-cluster.master_auth.0.cluster_ca_certificate)}"
+//      K8S_SERVER = "https://${google_container_cluster.fd2-k8s-cluster.endpoint}"
+//      KUBERNETES_MASTER = "https://${google_container_cluster.fd2-k8s-cluster.endpoint}:8080"
+//      K8S_TOKEN = "${data.google_client_config.provider.access_token}"
+//      GCP_PROJECT = "${var.project}"
+//      GCP_ZONE = "${google_container_cluster.fd2-k8s-cluster.zone}"
+//      GOOGLE_APPLICATION_CREDENTIALS = "${path.module}/terraform.json"
+//      KUBECONFIG="${path.module}/k8s/ci"
+//    }
 //  }
+//
 //}
+
