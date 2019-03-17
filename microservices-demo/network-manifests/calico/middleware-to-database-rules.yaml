@@ -1,0 +1,15 @@
+kind: NetworkPolicy
+apiVersion: networking.k8s.io/v1
+metadata:
+  name: allow-currencyservice-rediscart
+spec:
+  podSelector:
+    matchLabels:
+      app: redis-cart
+#      tier: database
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: currencyservice
+#              tier: middleware
