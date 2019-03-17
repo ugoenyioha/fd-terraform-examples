@@ -24,6 +24,7 @@ spec:
     metadata:
       labels:
         app: checkoutservice
+        tier: backend
     spec:
       containers:
         - name: server

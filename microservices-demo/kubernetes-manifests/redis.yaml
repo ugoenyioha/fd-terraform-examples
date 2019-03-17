@@ -24,6 +24,7 @@ spec:
     metadata:
       labels:
         app: redis-cart
+        tier: database
     spec:
       containers:
       - name: redis
