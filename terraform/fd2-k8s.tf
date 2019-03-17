@@ -52,7 +52,7 @@ resource "google_service_account" "kube-cluster" {
 resource "google_container_cluster" "fd2-k8s-cluster" {
   provider = "google-beta"
 
-  name               = "tf-gke-helm"
+  name               = "fd2-k8s-cluster"
   region               = "${var.region}"  // creates a regional cluster of 3
   initial_node_count = 1
   min_master_version = "${data.google_container_engine_versions.default.latest_master_version}"
@@ -162,46 +162,66 @@ resource "kubernetes_cluster_role_binding" "user" {
     kind = "User"
     name = "${data.google_client_openid_userinfo.provider_identity.email}"
   }
+
+  depends_on = ["google_container_cluster.fd2-k8s-cluster"]
 }
 
-data "google_container_registry_repository" "registry" {}
-data "google_project" "current_project" {}
+resource "kubernetes_cluster_role_binding" "default" {
+  metadata {
+    name = "default"
+  }
 
-//resource "null_resource" "deploy-microservices-app" {
-//  triggers {
-//    cluster_ep = "${google_container_cluster.fd2-k8s-cluster.endpoint}"
-//  }
-//
-//  provisioner "local-exec" {
-//    command = <<EOT
-//        echo "$${CA_CERTIFICATE}" > ${path.module}/k8s/ca.crt
-//
-//        kubectl config --kubeconfig=${path.module}/k8s/ci set-cluster my-cluster --server=$${K8S_SERVER} --certificate-authority=${path.module}/k8s/ca.crt
-//        kubectl config --kubeconfig=${path.module}/k8s/ci set-credentials admin --token=$${K8S_TOKEN}
-//        kubectl config --kubeconfig=${path.module}/k8s/ci set-context gke --cluster=my-cluster --user=admin
-//
-//        kubectl --kubeconfig=${path.module}/k8s/ci --context gke get cs
-//
-//        gcloud auth configure-docker
-//        pushd ${path.module}/../microservices-demo
-//        skaffold run -p gcb --default-repo=gcr.io/${var.project}
-//        popd
-//
-//        sleep 60
-//
-//      EOT
-//
-//    environment {
-//      CA_CERTIFICATE = "${base64decode(google_container_cluster.fd2-k8s-cluster.master_auth.0.cluster_ca_certificate)}"
-//      K8S_SERVER = "https://${google_container_cluster.fd2-k8s-cluster.endpoint}"
-//      KUBERNETES_MASTER = "https://${google_container_cluster.fd2-k8s-cluster.endpoint}:8080"
-//      K8S_TOKEN = "${data.google_client_config.provider.access_token}"
-//      GCP_PROJECT = "${var.project}"
-//      GCP_ZONE = "${google_container_cluster.fd2-k8s-cluster.zone}"
-//      GOOGLE_APPLICATION_CREDENTIALS = "${path.module}/terraform.json"
-//      KUBECONFIG="${path.module}/k8s/ci"
-//    }
-//  }
-//
-//}
+  subject {
+    kind = "User"
+    name = "system:serviceaccount:kube-system:default"
+  }
+
+  role_ref {
+    kind  = "ClusterRole"
+    name = "cluster-admin"
+    api_group = ""
+  }
+
+  depends_on = ["google_container_cluster.fd2-k8s-cluster"]
+}
+
+resource "null_resource" "deploy-microservices-app" {
+  triggers {
+    cluster_ep = "${google_container_cluster.fd2-k8s-cluster.endpoint}"
+  }
+
+  provisioner "local-exec" {
+    command = <<EOT
+        echo "$${CA_CERTIFICATE}" > ${path.module}/k8s/ca.crt
+
+        kubectl config --kubeconfig=${path.module}/k8s/ci set-cluster my-cluster --server=$${K8S_SERVER} --certificate-authority=${path.module}/k8s/ca.crt
+        kubectl config --kubeconfig=${path.module}/k8s/ci set-credentials admin --token=$${K8S_TOKEN}
+        kubectl config --kubeconfig=${path.module}/k8s/ci set-context gke --cluster=my-cluster --user=admin
+        kubectl config --kubeconfig=${path.module}/k8s/ci use-context gke
+        kubectl config current-context
+
+        kubectl --kubeconfig=${path.module}/k8s/ci --context gke get cs
+
+        gcloud auth configure-docker
+        pushd ${path.module}/../microservices-demo
+        skaffold run -p gcb --default-repo=gcr.io/${var.project}
+        popd
+
+      EOT
+
+    environment {
+      CA_CERTIFICATE = "${base64decode(google_container_cluster.fd2-k8s-cluster.master_auth.0.cluster_ca_certificate)}"
+      K8S_SERVER = "https://${google_container_cluster.fd2-k8s-cluster.endpoint}"
+      KUBERNETES_MASTER = "https://${google_container_cluster.fd2-k8s-cluster.endpoint}"
+      K8S_TOKEN = "${data.google_client_config.provider.access_token}"
+      GCP_PROJECT = "${var.project}"
+      GCP_ZONE = "${google_container_cluster.fd2-k8s-cluster.zone}"
+      GOOGLE_APPLICATION_CREDENTIALS = "${path.module}/terraform.json"
+      KUBECONFIG="${path.module}/k8s/ci"
+    }
+  }
+
+  depends_on = ["kubernetes_cluster_role_binding.default", "kubernetes_cluster_role_binding.user"]
+
+}
 
