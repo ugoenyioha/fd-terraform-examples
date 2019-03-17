@@ -34,6 +34,11 @@ resource "google_compute_instance_template" "webserver" {
 
   network_interface {
     network = "${google_compute_network.fd1-net.name}"
+
+    access_config {
+      // Ephemeral IP
+    }
+
   }
 
   //  metadata = {
@@ -42,7 +47,7 @@ resource "google_compute_instance_template" "webserver" {
 
   service_account {
     scopes = ["userinfo-email", "compute-ro", "storage-ro"]
-    email = "${google_service_account.backend.email}"
+    email = "${google_service_account.webserver.email}"
   }
 }
 
