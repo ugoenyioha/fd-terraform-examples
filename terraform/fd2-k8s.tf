@@ -39,6 +39,29 @@ resource "google_compute_subnetwork" "fd-2-subnet" {
   }
 }
 
+resource "google_compute_router" "router" {
+  name    = "router"
+  region  = "${google_compute_subnetwork.fd-2-subnet.region}"
+  network = "${google_compute_network.fd-2.self_link}"
+  bgp {
+    asn = 64514
+  }
+}
+
+resource "google_compute_address" "address" {
+  count  = 2
+  name   = "nat-external-address-${count.index}"
+  region = "${var.region}"
+}
+
+resource "google_compute_router_nat" "simple-nat" {
+  name                               = "fd2-nat"
+  router                             = "${google_compute_router.router.name}"
+  region                             = "${var.region}"
+  nat_ip_allocate_option             = "AUTO_ONLY"
+  source_subnetwork_ip_ranges_to_nat = "ALL_SUBNETWORKS_ALL_IP_RANGES"
+}
+
 data "google_container_engine_versions" "default" {
   zone = "${var.zone}"
 }
@@ -99,23 +122,19 @@ resource "google_container_cluster" "fd2-k8s-cluster" {
       {
         display_name = "direct"
         cidr_block = "${chomp(data.http.myip.body)}/32"
-      },
-      {
-        display_name = "shell"
-        cidr_block = "${lookup(data.external.shell.result, "shell-address")}/32"
       }
     ]
   }
 
-  //  network_policy {
-  //    enabled = true
-  //    provider = "CALICO"
-  //  }
+  network_policy {
+    enabled = true
+    provider = "CALICO"
+  }
 
   node_config {
     oauth_scopes = [
       "https://www.googleapis.com/auth/compute",
-      "https://www.googleapis.com/auth/devstorage.read_only",
+      "https://www.googleapis.com/auth/devstorage.read_write",
       "https://www.googleapis.com/auth/logging.write",
       "https://www.googleapis.com/auth/monitoring",
       "https://www.googleapis.com/auth/userinfo.email"
@@ -224,4 +243,38 @@ resource "null_resource" "deploy-microservices-app" {
   depends_on = ["kubernetes_cluster_role_binding.default", "kubernetes_cluster_role_binding.user"]
 
 }
+
+//resource "null_resource" "deploy-microservices-app" {
+//  triggers {
+//    cluster_ep = "${google_container_cluster.fd2-k8s-cluster.endpoint}"
+//  }
+//
+//  provisioner "local-exec" {
+//    command = <<EOT
+//        kubectl config --kubeconfig=${path.module}/k8s/ci current-context
+//
+//        kubectl --kubeconfig=${path.module}/k8s/ci --context gke get cs
+//
+//        gcloud auth configure-docker
+//        pushd ${path.module}/../microservices-demo
+//        skaffold run -p gcb --default-repo=gcr.io/${var.project}
+//        popd
+//
+//      EOT
+//
+//    environment {
+//      CA_CERTIFICATE = "${base64decode(google_container_cluster.fd2-k8s-cluster.master_auth.0.cluster_ca_certificate)}"
+//      K8S_SERVER = "https://${google_container_cluster.fd2-k8s-cluster.endpoint}"
+//      KUBERNETES_MASTER = "https://${google_container_cluster.fd2-k8s-cluster.endpoint}"
+//      K8S_TOKEN = "${data.google_client_config.provider.access_token}"
+//      GCP_PROJECT = "${var.project}"
+//      GCP_ZONE = "${google_container_cluster.fd2-k8s-cluster.zone}"
+//      GOOGLE_APPLICATION_CREDENTIALS = "${path.module}/terraform.json"
+//      KUBECONFIG="${path.module}/k8s/ci"
+//    }
+//  }
+//
+//  depends_on = ["null_resource.deploy-microservices-app"]
+//
+//}
 

@@ -8,4 +8,5 @@ spec:
       app: currencyservice
   policyTypes:
     - Egress
-  egress: []
+  egress:
+    - to: []

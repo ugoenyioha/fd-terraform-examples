@@ -2,6 +2,7 @@ kind: NetworkPolicy
 apiVersion: networking.k8s.io/v1
 metadata:
   name: allow-currencyservice-rediscart
+  namespace: default
 spec:
   podSelector:
     matchLabels:
@@ -12,4 +13,4 @@ spec:
         - podSelector:
             matchLabels:
               app: currencyservice
-#              tier: middleware
+#              tier: backend
