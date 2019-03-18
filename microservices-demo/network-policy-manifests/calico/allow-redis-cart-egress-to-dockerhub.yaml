@@ -1,0 +1,23 @@
+# this is great example of why IP whitelist based solutions are problematic
+# background - this rule whitelists docker-hub to allow the redis pod pull down the redis container image
+# unfortunately calico can only whitelist by IP so it is limited in utility.
+# imagine if this was a production environment with outbound egress enabled.
+# there is every chance that the endpoint at registry-1.docker.io will change in future and once this happens this
+# service will fail
+# alternative solutions like cilium and istio are preferred as a result because they allow
+# whitelisting by actual domain names
+
+#apiVersion: networking.k8s.io/v1
+#kind: NetworkPolicy
+#metadata:
+#  name: redis-cart-allow-egress
+#spec:
+#  podSelector:
+#    matchLabels:
+#      app: redis-cart
+#  policyTypes:
+#    - Egress
+#  egress:
+#    - to:
+#      - ipBlock:
+#          cidr: 52.70.175.131/32

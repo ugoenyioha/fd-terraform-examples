@@ -48,7 +48,7 @@ deploy:
   kubectl:
     manifests:
     - ./kubernetes-manifests/**.yaml
-    - ./network-manifests/calico/**.yaml
+    - ./network-policy-manifests/calico/**.yaml
 profiles:
 # "travis-ci" profile is used to build the images without
 # pushing them.

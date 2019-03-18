@@ -1,16 +1,14 @@
-# allows the front end to talk to any hosts with the middleware tier label
-
 kind: NetworkPolicy
 apiVersion: networking.k8s.io/v1
 metadata:
-  name: allow-frontend-to-middleware
+  name: allow-loadgenerator-to-frontend
   namespace: default
 spec:
   podSelector:
     matchLabels:
-      tier: backend
+      app: frontend
   ingress:
     - from:
         - podSelector:
             matchLabels:
-             tier: frontend
+              app: loadgenerator

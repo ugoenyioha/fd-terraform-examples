@@ -1,16 +1,16 @@
+# allows the front end to talk to any hosts with the middleware tier label
+
 kind: NetworkPolicy
 apiVersion: networking.k8s.io/v1
 metadata:
-  name: allow-currencyservice-rediscart
+  name: allow-frontend-to-backend
   namespace: default
 spec:
   podSelector:
     matchLabels:
-      app: redis-cart
-#      tier: database
+      tier: backend
   ingress:
     - from:
         - podSelector:
             matchLabels:
-              app: currencyservice
-#              tier: backend
+             tier: frontend
